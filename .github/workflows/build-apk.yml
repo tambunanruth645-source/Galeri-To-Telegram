@@ -25,11 +25,13 @@ jobs:
         with:
           gradle-version: '8.2'
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: Build APKs
+        run: gradle assembleRelease assembleDebug --stacktrace
 
       - name: Upload APK ke GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: GaleriToTelegram-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/debug/app-debug.apk
