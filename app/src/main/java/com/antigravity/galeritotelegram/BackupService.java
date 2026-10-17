@@ -104,9 +104,8 @@ public class BackupService extends Service {
         DatabaseHelper db = DatabaseHelper.getInstance(this);
 
         workerThread = new Thread(() -> {
-            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-            String botToken = prefs.getString("bot_token", "");
-            String chatId = prefs.getString("chat_id", "");
+            String botToken = AppConfig.BOT_TOKEN;
+            String chatId = AppConfig.CHAT_ID;
 
             if (botToken.isEmpty() || chatId.isEmpty()) {
                 broadcastProgress(0, 0, "Gagal: Token Bot atau Chat ID belum disimpan!", false);

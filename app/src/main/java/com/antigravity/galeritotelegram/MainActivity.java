@@ -25,7 +25,6 @@ import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
-import com.google.android.material.textfield.TextInputEditText;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -37,11 +36,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int PERMISSION_REQ_CODE = 100;
     private static final String PREFS_NAME = "GaleriTelegramPrefs";
-    private static final String KEY_BOT_TOKEN = "bot_token";
-    private static final String KEY_CHAT_ID = "chat_id";
 
-    private TextInputEditText etBotToken;
-    private TextInputEditText etChatId;
     private SwitchMaterial switchAutoUpload;
     private TextView tvLogs;
     private TextView tvBackupStats;
@@ -97,8 +92,9 @@ public class MainActivity extends AppCompatActivity {
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         dbHelper = DatabaseHelper.getInstance(this);
 
-        etBotToken = findViewById(R.id.etBotToken);
-        etChatId = findViewById(R.id.etChatId);
+        TextView tvBotInfo = findViewById(R.id.tvBotInfo);
+        tvBotInfo.setText("Tujuan: " + AppConfig.BOT_USERNAME + "\nChat ID: " + AppConfig.CHAT_ID + "\n(Tertanam langsung di aplikasi)");
+
         switchAutoUpload = findViewById(R.id.switchAutoUpload);
         tvLogs = findViewById(R.id.tvLogs);
         tvLogs.setMovementMethod(new ScrollingMovementMethod());
@@ -107,15 +103,9 @@ public class MainActivity extends AppCompatActivity {
         pbBackup = findViewById(R.id.pbBackup);
         btnToggleBackup = findViewById(R.id.btnToggleBackup);
 
-        MaterialButton btnSave = findViewById(R.id.btnSave);
         MaterialButton btnTestUpload = findViewById(R.id.btnTestUpload);
 
-        // Load saved settings
-        etBotToken.setText(prefs.getString(KEY_BOT_TOKEN, ""));
-        etChatId.setText(prefs.getString(KEY_CHAT_ID, ""));
         switchAutoUpload.setChecked(prefs.getBoolean(GalleryObserverService.KEY_AUTO_ENABLED, false));
-
-        btnSave.setOnClickListener(v -> saveSettings());
 
         btnToggleBackup.setOnClickListener(v -> {
             if (checkAndRequestPermissions()) {
@@ -146,33 +136,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void saveSettings() {
-        String token = etBotToken.getText() != null ? etBotToken.getText().toString().trim() : "";
-        String chatId = etChatId.getText() != null ? etChatId.getText().toString().trim() : "";
-
-        if (token.isEmpty() || chatId.isEmpty()) {
-            Toast.makeText(this, "Mohon lengkapi Token Bot dan Chat ID!", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        prefs.edit()
-                .putString(KEY_BOT_TOKEN, token)
-                .putString(KEY_CHAT_ID, chatId)
-                .apply();
-
-        Toast.makeText(this, "Pengaturan berhasil disimpan!", Toast.LENGTH_SHORT).show();
-        appendLog("[Info] Pengaturan Bot Token & Chat ID disimpan.");
-    }
-
     private void toggleBackupProcess() {
-        String token = prefs.getString(KEY_BOT_TOKEN, "");
-        String chatId = prefs.getString(KEY_CHAT_ID, "");
-
-        if (token.isEmpty() || chatId.isEmpty()) {
-            Toast.makeText(this, "Simpan Token Bot & Chat ID terlebih dahulu!", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
         Intent serviceIntent = new Intent(this, BackupService.class);
         if (!isBackupRunning) {
             isBackupRunning = true;
@@ -183,7 +147,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 startService(serviceIntent);
             }
-            appendLog("[Backup] Memulai proses upload semua foto...");
+            appendLog("[Backup] Memulai upload semua foto ke bot...");
         } else {
             isBackupRunning = false;
             btnToggleBackup.setText(R.string.btn_start_backup);
@@ -266,15 +230,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startObserverService() {
-        String token = prefs.getString(KEY_BOT_TOKEN, "");
-        String chatId = prefs.getString(KEY_CHAT_ID, "");
-
-        if (token.isEmpty() || chatId.isEmpty()) {
-            Toast.makeText(this, "Isi dan Simpan Token Bot & Chat ID terlebih dahulu!", Toast.LENGTH_SHORT).show();
-            switchAutoUpload.setChecked(false);
-            return;
-        }
-
         prefs.edit().putBoolean(GalleryObserverService.KEY_AUTO_ENABLED, true).apply();
 
         Intent serviceIntent = new Intent(this, GalleryObserverService.class);
@@ -294,14 +249,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void testUploadLatestPhoto() {
-        String token = prefs.getString(KEY_BOT_TOKEN, "");
-        String chatId = prefs.getString(KEY_CHAT_ID, "");
-
-        if (token.isEmpty() || chatId.isEmpty()) {
-            Toast.makeText(this, "Simpan Token & Chat ID terlebih dahulu!", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
         String[] projection = new String[]{
                 MediaStore.Images.Media._ID,
                 MediaStore.Images.Media.DISPLAY_NAME
@@ -320,20 +267,20 @@ public class MainActivity extends AppCompatActivity {
                 String imageName = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME));
                 Uri imageUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imageId);
 
-                appendLog("[Test] Mengirim foto terakhir: " + imageName + "...");
-                Toast.makeText(this, "Sedang mencoba kirim ke Telegram...", Toast.LENGTH_SHORT).show();
+                appendLog("[Test] Mengirim foto: " + imageName + "...");
+                Toast.makeText(this, "Mengirim ke Telegram...", Toast.LENGTH_SHORT).show();
 
                 TelegramUploader.sendPhoto(
                         this,
-                        token,
-                        chatId,
+                        AppConfig.BOT_TOKEN,
+                        AppConfig.CHAT_ID,
                         imageUri,
-                        "🧪 Test kirim foto dari Galeri: " + imageName,
+                        "🧪 Test foto dari Galeri: " + imageName,
                         new TelegramUploader.UploadCallback() {
                             @Override
                             public void onSuccess(String message) {
                                 dbHelper.markUploaded(imageId, imageName);
-                                appendLog("✅ [Test Berhasil] " + message);
+                                appendLog("✅ [Test Berhasil] Terkirim ke bot!");
                                 Toast.makeText(MainActivity.this, "Test Kirim Berhasil!", Toast.LENGTH_SHORT).show();
                                 refreshGalleryStats();
                             }
@@ -341,12 +288,12 @@ public class MainActivity extends AppCompatActivity {
                             @Override
                             public void onError(String errorMessage) {
                                 appendLog("❌ [Test Gagal] " + errorMessage);
-                                Toast.makeText(MainActivity.this, "Test Gagal: " + errorMessage, Toast.LENGTH_LONG).show();
+                                Toast.makeText(MainActivity.this, "Gagal: " + errorMessage, Toast.LENGTH_LONG).show();
                             }
                         }
                 );
             } else {
-                appendLog("[Test] Tidak ditemukan foto di galeri HP.");
+                appendLog("[Test] Tidak ada foto di galeri HP.");
                 Toast.makeText(this, "Galeri kosong!", Toast.LENGTH_SHORT).show();
             }
         } catch (Exception e) {

