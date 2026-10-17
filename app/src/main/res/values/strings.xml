@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Galeri ke Telegram</string>
+    <string name="title_bot_settings">Pengaturan Bot Telegram</string>
+    <string name="hint_bot_token">Bot Token (Contoh: 123456:ABC-DEF...)</string>
+    <string name="hint_chat_id">Chat ID (Contoh: 987654321 atau -100...)</string>
+    <string name="btn_save">Simpan Pengaturan</string>
+    <string name="btn_test">Test Kirim Foto Terakhir</string>
+    <string name="switch_auto">Pemantau Galeri Otomatis</string>
+    <string name="switch_desc">Otomatis kirim foto baru tanpa bikin HP lag (0% CPU saat diam)</string>
+    <string name="service_running_title">Pemantau Galeri Aktif</string>
+    <string name="service_running_desc">Siap mengirimkan foto baru yang masuk ke galeri...</string>
+    <string name="log_title">Log Aktivitas:</string>
+</resources>
