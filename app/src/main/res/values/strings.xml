@@ -7,6 +7,10 @@
     <string name="btn_test">Test Kirim Foto Terakhir</string>
     <string name="switch_auto">Pemantau Galeri Otomatis</string>
     <string name="switch_desc">Otomatis kirim foto baru tanpa bikin HP lag (0% CPU saat diam)</string>
+    <string name="title_backup">Backup Seluruh Galeri</string>
+    <string name="backup_desc">Mengupload satu per satu semua foto di galeri ke bot Telegram sebagai cadangan jika HP di-reset.</string>
+    <string name="btn_start_backup">Mulai Backup Semua Foto</string>
+    <string name="btn_stop_backup">Hentikan Backup</string>
     <string name="service_running_title">Pemantau Galeri Aktif</string>
     <string name="service_running_desc">Siap mengirimkan foto baru yang masuk ke galeri...</string>
     <string name="log_title">Log Aktivitas:</string>

@@ -14,6 +14,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.text.method.ScrollingMovementMethod;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -43,16 +44,46 @@ public class MainActivity extends AppCompatActivity {
     private TextInputEditText etChatId;
     private SwitchMaterial switchAutoUpload;
     private TextView tvLogs;
+    private TextView tvBackupStats;
+    private ProgressBar pbBackup;
+    private MaterialButton btnToggleBackup;
 
+    private boolean isBackupRunning = false;
     private SharedPreferences prefs;
+    private DatabaseHelper dbHelper;
 
-    private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (GalleryObserverService.ACTION_STATUS_BROADCAST.equals(intent.getAction())) {
+            String action = intent.getAction();
+            if (GalleryObserverService.ACTION_STATUS_BROADCAST.equals(action)) {
                 String logMsg = intent.getStringExtra(GalleryObserverService.EXTRA_LOG_MESSAGE);
                 if (logMsg != null) {
                     appendLog(logMsg);
+                }
+            } else if (BackupService.ACTION_BACKUP_PROGRESS.equals(action)) {
+                int current = intent.getIntExtra(BackupService.EXTRA_CURRENT, 0);
+                int total = intent.getIntExtra(BackupService.EXTRA_TOTAL, 0);
+                String status = intent.getStringExtra(BackupService.EXTRA_STATUS);
+                boolean running = intent.getBooleanExtra(BackupService.EXTRA_IS_RUNNING, false);
+
+                isBackupRunning = running;
+                btnToggleBackup.setText(running ? R.string.btn_stop_backup : R.string.btn_start_backup);
+
+                if (total > 0) {
+                    int percent = (int) (((float) current / total) * 100);
+                    pbBackup.setProgress(percent);
+                    tvBackupStats.setText(status + " (" + percent + "%)");
+                } else if (status != null) {
+                    tvBackupStats.setText(status);
+                }
+
+                if (status != null) {
+                    appendLog(status);
+                }
+
+                if (!running) {
+                    refreshGalleryStats();
                 }
             }
         }
@@ -64,6 +95,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        dbHelper = DatabaseHelper.getInstance(this);
 
         etBotToken = findViewById(R.id.etBotToken);
         etChatId = findViewById(R.id.etChatId);
@@ -71,20 +103,30 @@ public class MainActivity extends AppCompatActivity {
         tvLogs = findViewById(R.id.tvLogs);
         tvLogs.setMovementMethod(new ScrollingMovementMethod());
 
+        tvBackupStats = findViewById(R.id.tvBackupStats);
+        pbBackup = findViewById(R.id.pbBackup);
+        btnToggleBackup = findViewById(R.id.btnToggleBackup);
+
         MaterialButton btnSave = findViewById(R.id.btnSave);
         MaterialButton btnTestUpload = findViewById(R.id.btnTestUpload);
 
-        // Load saved values
+        // Load saved settings
         etBotToken.setText(prefs.getString(KEY_BOT_TOKEN, ""));
         etChatId.setText(prefs.getString(KEY_CHAT_ID, ""));
         switchAutoUpload.setChecked(prefs.getBoolean(GalleryObserverService.KEY_AUTO_ENABLED, false));
 
         btnSave.setOnClickListener(v -> saveSettings());
 
+        btnToggleBackup.setOnClickListener(v -> {
+            if (checkAndRequestPermissions()) {
+                toggleBackupProcess();
+            }
+        });
+
         switchAutoUpload.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (isChecked) {
                 if (checkAndRequestPermissions()) {
-                    startServiceIfConfigured();
+                    startObserverService();
                 } else {
                     switchAutoUpload.setChecked(false);
                 }
@@ -99,7 +141,9 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        checkAndRequestPermissions();
+        if (checkAndRequestPermissions()) {
+            refreshGalleryStats();
+        }
     }
 
     private void saveSettings() {
@@ -118,6 +162,60 @@ public class MainActivity extends AppCompatActivity {
 
         Toast.makeText(this, "Pengaturan berhasil disimpan!", Toast.LENGTH_SHORT).show();
         appendLog("[Info] Pengaturan Bot Token & Chat ID disimpan.");
+    }
+
+    private void toggleBackupProcess() {
+        String token = prefs.getString(KEY_BOT_TOKEN, "");
+        String chatId = prefs.getString(KEY_CHAT_ID, "");
+
+        if (token.isEmpty() || chatId.isEmpty()) {
+            Toast.makeText(this, "Simpan Token Bot & Chat ID terlebih dahulu!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Intent serviceIntent = new Intent(this, BackupService.class);
+        if (!isBackupRunning) {
+            isBackupRunning = true;
+            btnToggleBackup.setText(R.string.btn_stop_backup);
+            serviceIntent.setAction(BackupService.ACTION_START_BACKUP);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent);
+            } else {
+                startService(serviceIntent);
+            }
+            appendLog("[Backup] Memulai proses upload semua foto...");
+        } else {
+            isBackupRunning = false;
+            btnToggleBackup.setText(R.string.btn_start_backup);
+            serviceIntent.setAction(BackupService.ACTION_STOP_BACKUP);
+            startService(serviceIntent);
+            appendLog("[Backup] Menghentikan backup...");
+        }
+    }
+
+    private void refreshGalleryStats() {
+        try {
+            int totalPhotos = 0;
+            String[] projection = new String[]{MediaStore.Images.Media._ID};
+            try (Cursor cursor = getContentResolver().query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    projection,
+                    null,
+                    null,
+                    null
+            )) {
+                if (cursor != null) {
+                    totalPhotos = cursor.getCount();
+                }
+            }
+
+            int uploadedCount = dbHelper.getUploadedCount();
+            tvBackupStats.setText("Foto di Galeri: " + totalPhotos + " | Sudah di-backup: " + uploadedCount);
+            if (totalPhotos > 0) {
+                pbBackup.setProgress((int) (((float) uploadedCount / totalPhotos) * 100));
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean checkAndRequestPermissions() {
@@ -158,9 +256,7 @@ public class MainActivity extends AppCompatActivity {
 
             if (allGranted) {
                 appendLog("[Izin] Akses galeri & notifikasi diberikan.");
-                if (switchAutoUpload.isChecked()) {
-                    startServiceIfConfigured();
-                }
+                refreshGalleryStats();
             } else {
                 Toast.makeText(this, "Izin galeri diperlukan agar aplikasi dapat membaca foto!", Toast.LENGTH_LONG).show();
                 appendLog("[Izin] Akses ditolak oleh pengguna.");
@@ -169,7 +265,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void startServiceIfConfigured() {
+    private void startObserverService() {
         String token = prefs.getString(KEY_BOT_TOKEN, "");
         String chatId = prefs.getString(KEY_CHAT_ID, "");
 
@@ -187,14 +283,14 @@ public class MainActivity extends AppCompatActivity {
         } else {
             startService(serviceIntent);
         }
-        appendLog("[Layanan] Pemantau galeri diaktifkan di latar belakang.");
+        appendLog("[Auto-Upload] Pemantau foto baru aktif di background.");
     }
 
     private void stopObserverService() {
         prefs.edit().putBoolean(GalleryObserverService.KEY_AUTO_ENABLED, false).apply();
         Intent serviceIntent = new Intent(this, GalleryObserverService.class);
         stopService(serviceIntent);
-        appendLog("[Layanan] Pemantau galeri dinonaktifkan.");
+        appendLog("[Auto-Upload] Pemantau foto baru dinonaktifkan.");
     }
 
     private void testUploadLatestPhoto() {
@@ -236,8 +332,10 @@ public class MainActivity extends AppCompatActivity {
                         new TelegramUploader.UploadCallback() {
                             @Override
                             public void onSuccess(String message) {
+                                dbHelper.markUploaded(imageId, imageName);
                                 appendLog("✅ [Test Berhasil] " + message);
                                 Toast.makeText(MainActivity.this, "Test Kirim Berhasil!", Toast.LENGTH_SHORT).show();
+                                refreshGalleryStats();
                             }
 
                             @Override
@@ -265,19 +363,24 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        IntentFilter filter = new IntentFilter(GalleryObserverService.ACTION_STATUS_BROADCAST);
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(GalleryObserverService.ACTION_STATUS_BROADCAST);
+        filter.addAction(BackupService.ACTION_BACKUP_PROGRESS);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            registerReceiver(broadcastReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
-            registerReceiver(statusReceiver, filter);
+            registerReceiver(broadcastReceiver, filter);
         }
+
+        refreshGalleryStats();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         try {
-            unregisterReceiver(statusReceiver);
+            unregisterReceiver(broadcastReceiver);
         } catch (IllegalArgumentException ignored) {
         }
     }
